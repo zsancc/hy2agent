@@ -12,6 +12,43 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
+# 检查是否已安装
+if [ -f "/usr/local/bin/hy2agent" ]; then
+    echo -e "${YELLOW}检测到已安装 hy2agent${NC}"
+    echo -e "请选择操作："
+    echo -e "1. 重新安装"
+    echo -e "2. 更新"
+    echo -e "3. 退出"
+    read -p "请输入选项 (1-3): " choice
+    
+    case $choice in
+        1)
+            echo -e "${YELLOW}开始重新安装...${NC}"
+            # 停止服务
+            systemctl stop hy2agent
+            systemctl disable hy2agent
+            ;;
+        2)
+            echo -e "${YELLOW}开始更新...${NC}"
+            # 备份配置
+            if [ -f "/etc/hy2agent/config.json" ]; then
+                cp /etc/hy2agent/config.json /etc/hy2agent/config.json.bak
+                echo -e "${GREEN}已备份配置文件到 /etc/hy2agent/config.json.bak${NC}"
+            fi
+            # 停止服务
+            systemctl stop hy2agent
+            ;;
+        3)
+            echo -e "${YELLOW}退出安装${NC}"
+            exit 0
+            ;;
+        *)
+            echo -e "${RED}无效选项${NC}"
+            exit 1
+            ;;
+    esac
+fi
+
 # 检查系统类型和架构
 OS=$(uname -s)
 ARCH=$(uname -m)
@@ -56,7 +93,7 @@ mkdir -p /usr/local/bin
 
 # 下载对应版本的二进制文件
 VERSION="v1.0.0"
-DOWNLOAD_URL="https://github.com/yourusername/hy2agent/releases/download/${VERSION}/hy2agent-${OS}-${ARCH}"
+DOWNLOAD_URL="https://github.com/zsancc/hy2agent/releases/download/${VERSION}/hy2agent-${OS}-${ARCH}"
 
 echo -e "${YELLOW}正在下载 hy2agent...${NC}"
 wget -O /usr/local/bin/hy2agent $DOWNLOAD_URL || {
@@ -98,6 +135,13 @@ if systemctl is-active --quiet hy2agent; then
     API_KEY=$(grep -o '"api_key": "[^"]*' /etc/hy2agent/config.json | cut -d'"' -f4)
     echo -e "${GREEN}API Key: ${YELLOW}$API_KEY${NC}"
     echo -e "${GREEN}请妥善保管 API Key${NC}"
+    
+    # 如果是更新，恢复配置
+    if [ "$choice" = "2" ] && [ -f "/etc/hy2agent/config.json.bak" ]; then
+        mv /etc/hy2agent/config.json.bak /etc/hy2agent/config.json
+        echo -e "${GREEN}已恢复配置文件${NC}"
+        systemctl restart hy2agent
+    fi
 else
     echo -e "${RED}hy2agent 安装失败，请检查日志${NC}"
     journalctl -u hy2agent --no-pager -n 50
