@@ -91,6 +91,41 @@ $PKG_INSTALL curl wget systemd
 mkdir -p /etc/hy2agent
 mkdir -p /usr/local/bin
 
+# 配置端口和白名单
+read -p "请输入服务端口 (默认: 8080): " PORT
+PORT=${PORT:-8080}
+
+read -p "请输入Web管理面板IP (用于白名单): " WEB_IP
+if [ -z "$WEB_IP" ]; then
+    echo -e "${RED}Web IP 不能为空${NC}"
+    exit 1
+fi
+
+# 创建初始配置文件
+cat > /etc/hy2agent/config.json << EOF
+{
+    "api_key": "$(openssl rand -hex 32)",
+    "ip_whitelist": ["127.0.0.1", "$WEB_IP"],
+    "ip_blacklist": []
+}
+EOF
+
+# 检查防火墙
+if command -v ufw >/dev/null 2>&1; then
+    echo -e "${YELLOW}检测到 UFW 防火墙${NC}"
+    echo -e "正在添加防火墙规则..."
+    ufw allow $PORT/tcp
+    echo -e "${GREEN}已添加 UFW 规则: $PORT/tcp${NC}"
+elif command -v firewall-cmd >/dev/null 2>&1; then
+    echo -e "${YELLOW}检测到 FirewallD 防火墙${NC}"
+    echo -e "正在添加防火墙规则..."
+    firewall-cmd --permanent --add-port=$PORT/tcp
+    firewall-cmd --reload
+    echo -e "${GREEN}已添加 FirewallD 规则: $PORT/tcp${NC}"
+else
+    echo -e "${YELLOW}未检测到支持的防火墙，请手动放通 $PORT 端口${NC}"
+fi
+
 # 下载对应版本的二进制文件
 VERSION="v1.0.0"
 DOWNLOAD_URL="https://github.com/zsancc/hy2agent/releases/download/${VERSION}/hy2agent-${OS}-${ARCH}"
@@ -112,7 +147,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/hy2agent
+ExecStart=/usr/local/bin/hy2agent -port $PORT
 Restart=always
 RestartSec=5
 
@@ -135,6 +170,8 @@ if systemctl is-active --quiet hy2agent; then
     API_KEY=$(grep -o '"api_key": "[^"]*' /etc/hy2agent/config.json | cut -d'"' -f4)
     echo -e "${GREEN}API Key: ${YELLOW}$API_KEY${NC}"
     echo -e "${GREEN}请妥善保管 API Key${NC}"
+    echo -e "${GREEN}Web IP 白名单: ${YELLOW}$WEB_IP${NC}"
+    echo -e "${GREEN}服务端口: ${YELLOW}$PORT${NC}"
     
     # 如果是更新，恢复配置
     if [ "$choice" = "2" ] && [ -f "/etc/hy2agent/config.json.bak" ]; then
@@ -150,8 +187,9 @@ fi
 
 # 显示使用说明
 echo -e "\n${GREEN}使用说明：${NC}"
-echo -e "1. API 文档：http://your-server:8080/docs"
+echo -e "1. API 文档：http://your-server:$PORT/docs"
 echo -e "2. 配置文件位置：/etc/hy2agent/config.json"
+echo -e "3. 防火墙端口：$PORT/tcp 需要放通"
 echo -e "3. 服务控制："
 echo -e "   - 启动：systemctl start hy2agent"
 echo -e "   - 停止：systemctl stop hy2agent"
