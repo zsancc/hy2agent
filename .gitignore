@@ -44,3 +44,39 @@ go.sum
 
 # 忽略测试输出
 coverage.txt
+
+#忽略编译
+build/
+
+# 忽略配置文件和备份
+config.json
+config.yaml
+*.bak
+
+
+
+# 忽略临时文件
+tmp/
+temp/
+
+# 忽略证书文件
+*.pem
+*.key
+*.crt
+*.csr
+
+# 忽略压缩文件
+*.tar.gz
+*.zip
+*.rar
+
+# 忽略系统生成的文件
+.directory
+Thumbs.db
+
+# 忽略调试文件
+debug
+__debug_bin
+
+# 忽略自动生成的文档
+docs/generated/
