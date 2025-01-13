@@ -20,11 +20,31 @@
   - IP 白名单/黑名单
   - 配置自动备份
 
-## 安装
+## 快速安装
+
+### 一键安装脚本
+```bash
+# 使用 curl
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/zsancc/hy2agent/main/install.sh)"
+
+# 或使用 wget
+bash -c "$(wget -qO- https://raw.githubusercontent.com/zsancc/hy2agent/main/install.sh)"
+```
+
+### 一键卸载
+```bash
+# 使用 curl
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/zsancc/hy2agent/main/uninstall.sh)"
+
+# 或使用 wget
+bash -c "$(wget -qO- https://raw.githubusercontent.com/zsancc/hy2agent/main/uninstall.sh)"
+```
+
+## 从源码编译安装
 
 1. 下载项目
 ```bash
-git clone https://github.com/yourusername/hy2agent.git
+git clone https://github.com/zsancc/hy2agent.git
 cd hy2agent
 ```
 
