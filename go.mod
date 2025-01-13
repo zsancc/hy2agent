@@ -1,4 +1,4 @@
-module agentapi
+module hy2agent
 
 go 1.23.4
 

@@ -9,9 +9,10 @@ import (
 )
 
 type Config struct {
-    APIKey      string   `json:"api_key"`
-    IPWhitelist []string `json:"ip_whitelist,omitempty"`
-    IPBlacklist []string `json:"ip_blacklist,omitempty"`
+    APIKey         string   `json:"api_key"`
+    IPWhitelist    []string `json:"ip_whitelist,omitempty"`
+    DomainWhitelist []string `json:"domain_whitelist,omitempty"`
+    IPBlacklist    []string `json:"ip_blacklist,omitempty"`
 }
 
 const (
