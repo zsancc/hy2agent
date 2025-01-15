@@ -1,10 +1,11 @@
 package v1
 
 import (
-	"github.com/gin-gonic/gin"
-	"agentapi/internal/service"
+	"hy2agent/internal/service"
 	"net/http"
 	"os/exec"
+
+	"github.com/gin-gonic/gin"
 )
 
 type SystemHandler struct {
@@ -75,4 +76,4 @@ func (h *SystemHandler) Shutdown(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "System is shutting down"})
-} 
+}
