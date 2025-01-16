@@ -98,59 +98,62 @@ PORT=${PORT:-8080}
 # 配置 HTTPS
 echo -e "\n${YELLOW}配置 HTTPS...${NC}"
 
+# 安装必要工具
+echo -e "${YELLOW}安装必要工具...${NC}"
+$PKG_UPDATE
+$PKG_INSTALL socat curl
+
 # 定义证书申请函数
 apply_cert() {
     local DOMAIN=$1
     local EMAIL=$2
     local SUCCESS=0
     
-    # 1. 检查是否有 Nginx
-    if command -v nginx >/dev/null 2>&1; then
-        echo -e "${YELLOW}检测到 Nginx，尝试使用 Nginx 模式...${NC}"
-        if ~/.acme.sh/acme.sh --issue -d $DOMAIN --nginx --server letsencrypt -k ec-256; then
-            SUCCESS=1
-        fi
+    # 1. 检查域名解析
+    echo -e "${YELLOW}检查域名解析...${NC}"
+    DOMAIN_IP=$(dig +short $DOMAIN)
+    SERVER_IP=$(curl -s4 ip.sb)
+    
+    if [ "$DOMAIN_IP" != "$SERVER_IP" ]; then
+        echo -e "${RED}域名 $DOMAIN 未解析到本机IP ($SERVER_IP)${NC}"
+        echo -e "${YELLOW}当前解析到: $DOMAIN_IP${NC}"
+        return 1
     fi
     
-    # 2. 检查是否有 Apache
-    if [ $SUCCESS -eq 0 ] && command -v apache2 >/dev/null 2>&1 || command -v httpd >/dev/null 2>&1; then
-        echo -e "${YELLOW}检测到 Apache，尝试使用 Apache 模式...${NC}"
-        if ~/.acme.sh/acme.sh --issue -d $DOMAIN --apache --server letsencrypt -k ec-256; then
-            SUCCESS=1
-        fi
-    fi
+    echo -e "${GREEN}域名解析正确${NC}"
     
-    # 3. 尝试 standalone 模式（80端口）
+    # 2. 尝试 standalone 模式（80端口）
     if [ $SUCCESS -eq 0 ]; then
         echo -e "${YELLOW}尝试使用 standalone 模式 (80端口)...${NC}"
+        # 临时停止占用 80 端口的服务
+        if lsof -i :80 >/dev/null 2>&1; then
+            echo -e "${YELLOW}临时停止占用 80 端口的服务...${NC}"
+            systemctl stop nginx 2>/dev/null || true
+            systemctl stop apache2 2>/dev/null || true
+            systemctl stop httpd 2>/dev/null || true
+        fi
+
         if ! lsof -i :80 >/dev/null 2>&1; then
-            if ~/.acme.sh/acme.sh --issue -d $DOMAIN --standalone --server letsencrypt -k ec-256; then
+            if ~/.acme.sh/acme.sh --issue -d $DOMAIN --standalone --server letsencrypt -k ec-256 --debug 2; then
                 SUCCESS=1
             fi
         else
             echo -e "${YELLOW}80端口被占用，尝试其他方式...${NC}"
         fi
+        
+        # 恢复之前停止的服务
+        systemctl start nginx 2>/dev/null || true
+        systemctl start apache2 2>/dev/null || true
+        systemctl start httpd 2>/dev/null || true
     fi
     
-    # 4. 尝试 alpn 模式（443端口）
-    if [ $SUCCESS -eq 0 ]; then
-        echo -e "${YELLOW}尝试使用 alpn 模式 (443端口)...${NC}"
-        if ! lsof -i :443 >/dev/null 2>&1; then
-            if ~/.acme.sh/acme.sh --issue -d $DOMAIN --alpn --server letsencrypt -k ec-256; then
-                SUCCESS=1
-            fi
-        else
-            echo -e "${YELLOW}443端口被占用，尝试其他方式...${NC}"
-        fi
-    fi
-    
-    # 5. 尝试 webroot 模式
+    # 3. 如果 standalone 失败，尝试 webroot 模式
     if [ $SUCCESS -eq 0 ]; then
         echo -e "${YELLOW}尝试使用 webroot 模式...${NC}"
         # 创建临时目录
         local WEBROOT="/var/www/acme-temp"
         mkdir -p $WEBROOT
-        if ~/.acme.sh/acme.sh --issue -d $DOMAIN -w $WEBROOT --server letsencrypt -k ec-256; then
+        if ~/.acme.sh/acme.sh --issue -d $DOMAIN -w $WEBROOT --server letsencrypt -k ec-256 --debug 2; then
             SUCCESS=1
         fi
         rm -rf $WEBROOT
@@ -158,6 +161,11 @@ apply_cert() {
     
     if [ $SUCCESS -eq 0 ]; then
         echo -e "${RED}所有证书申请方式都失败${NC}"
+        echo -e "${YELLOW}请检查：${NC}"
+        echo "1. 域名 $DOMAIN 是否正确解析到本机IP: $SERVER_IP"
+        echo "2. 80 端口是否被占用且无法释放"
+        echo "3. 防火墙是否放通了 80 端口"
+        echo "4. 查看详细日志：/root/.acme.sh/acme.sh.log"
         return 1
     fi
     

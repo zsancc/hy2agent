@@ -1,7 +1,7 @@
 #!/bin/bash
 
 VERSION="v1.0.0"
-PLATFORMS=("linux/amd64" "linux/arm64" "linux/arm")
+PLATFORMS=("linux/amd64" "linux/arm64")
 
 for PLATFORM in "${PLATFORMS[@]}"; do
     OS=${PLATFORM%/*}
