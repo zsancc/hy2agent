@@ -1,14 +1,31 @@
 package main
 
 import (
+	"flag"
 	v1 "hy2agent/api/v1"
 	"hy2agent/internal/config"
 	"log"
+	"path/filepath"
 
 	"github.com/gin-gonic/gin"
 )
 
+var (
+	port     = flag.String("port", "8080", "服务端口")
+	useTLS   = flag.Bool("tls", true, "是否使用 HTTPS")
+	certFile = flag.String("cert", "", "SSL 证书文件路径")
+	keyFile  = flag.String("key", "", "SSL 私钥文件路径")
+)
+
 func main() {
+	// 解析命令行参数
+	flag.Parse()
+
+	// 强制检查 HTTPS 所需的证书文件
+	if *certFile == "" || *keyFile == "" {
+		log.Fatalf("必须提供 SSL 证书和私钥文件路径")
+	}
+
 	// 加载配置
 	cfg, err := config.LoadConfig()
 	if err != nil {
@@ -38,8 +55,6 @@ func main() {
 		systemGroup.GET("/disk", systemHandler.GetDisk)
 		systemGroup.GET("/network", systemHandler.GetNetwork)
 		systemGroup.GET("/info", systemHandler.GetInfo)
-		systemGroup.POST("/reboot", systemHandler.Reboot)
-		systemGroup.POST("/shutdown", systemHandler.Shutdown)
 	}
 
 	// Hysteria2管理API
@@ -68,11 +83,19 @@ func main() {
 	{
 		configGroup.GET("/whitelist", configHandler.GetWhitelist)
 		configGroup.PUT("/whitelist", configHandler.UpdateWhitelist)
-		configGroup.GET("/blacklist", configHandler.GetBlacklist)
-		configGroup.PUT("/blacklist", configHandler.UpdateBlacklist)
 	}
 
-	r.Run(":8080")
+	// 启动服务器
+	addr := ":" + *port
+	// 检查证书文件是否存在
+	certPath := filepath.Clean(*certFile)
+	keyPath := filepath.Clean(*keyFile)
+	log.Printf("启动 HTTPS 服务在 %s", addr)
+	log.Printf("使用证书: %s", certPath)
+	log.Printf("使用私钥: %s", keyPath)
+	if err := r.RunTLS(addr, certPath, keyPath); err != nil {
+		log.Fatalf("启动 HTTPS 服务失败: %v", err)
+	}
 }
 
 func authMiddleware(cfg *config.Config) gin.HandlerFunc {
@@ -80,29 +103,18 @@ func authMiddleware(cfg *config.Config) gin.HandlerFunc {
 		// 获取客户端IP
 		clientIP := c.ClientIP()
 
-		// 检查黑名单
-		for _, ip := range cfg.IPBlacklist {
+		// 检查白名单
+		allowed := false
+		for _, ip := range cfg.IPWhitelist {
 			if ip == clientIP {
-				c.JSON(403, gin.H{"error": "IP is blacklisted"})
-				c.Abort()
-				return
+				allowed = true
+				break
 			}
 		}
-
-		// 如果设置了白名单，检查IP是否在白名单中
-		if len(cfg.IPWhitelist) > 0 {
-			allowed := false
-			for _, ip := range cfg.IPWhitelist {
-				if ip == clientIP {
-					allowed = true
-					break
-				}
-			}
-			if !allowed {
-				c.JSON(403, gin.H{"error": "IP not in whitelist"})
-				c.Abort()
-				return
-			}
+		if !allowed {
+			c.JSON(403, gin.H{"error": "Access denied"})
+			c.Abort()
+			return
 		}
 
 		// API Key认证

@@ -14,13 +14,10 @@
   - CPU/内存/磁盘监控
   - 网络状态监控
   - 系统信息查询
-  - 重启/关机控制
 - 安全特性
   - API Key 认证
   - 访问控制
     - IP 白名单：支持 IPv4 和 IPv6
-    - 域名白名单：支持通配符（如 *.example.com）
-    - IP 黑名单：全局禁止访问
   - 配置自动备份
 
 ## 快速安装
@@ -97,8 +94,7 @@ sudo systemctl start hy2agent
 ```json
 {
     "api_key": "your-api-key",
-    "ip_whitelist": ["192.168.1.100"],
-    "ip_blacklist": ["1.2.3.4"]
+    "ip_whitelist": ["192.168.1.100"]
 }
 ```
 
@@ -132,8 +128,6 @@ curl -H "X-API-Key: your-api-key" \
 1. 使用强密码作为 API Key
 2. 访问控制
     - IP 白名单：支持 IPv4 和 IPv6
-    - 域名白名单：支持通配符（如 *.example.com）
-    - IP 黑名单：全局禁止访问
 3. HTTPS 配置：
    - 方式一：安装时选择自动配置 HTTPS（使用 acme.sh）
      - 自动申请 Let's Encrypt 证书

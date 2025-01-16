@@ -95,51 +95,51 @@ mkdir -p /usr/local/bin
 read -p "请输入服务端口 (默认: 8080): " PORT
 PORT=${PORT:-8080}
 
-# HTTPS 配置选项
-echo -e "\n${YELLOW}HTTPS 配置：${NC}"
-echo "1. 使用 HTTPS（自动申请证书）"
-echo "2. 使用 HTTP（如需 HTTPS 请自行配置反向代理）"
-read -p "请选择 (1-2): " HTTPS_CHOICE
+# 配置 HTTPS
+echo -e "\n${YELLOW}配置 HTTPS...${NC}"
 
-case $HTTPS_CHOICE in
-    1)
-        # 安装 acme.sh
-        echo -e "${YELLOW}安装 acme.sh...${NC}"
-        curl https://get.acme.sh | sh
-        
-        # 设置自动更新 acme.sh
-        echo -e "${YELLOW}配置 acme.sh 自动更新...${NC}"
-        ~/.acme.sh/acme.sh --upgrade --auto-upgrade
-        
-        # 配置域名
-        read -p "请输入域名: " DOMAIN
-        if [ -z "$DOMAIN" ]; then
-            echo -e "${RED}域名不能为空${NC}"
-            exit 1
-        fi
-        
-        # 配置邮箱
-        read -p "请输入邮箱 (用于证书申请): " EMAIL
-        if [ -z "$EMAIL" ]; then
-            echo -e "${RED}邮箱不能为空${NC}"
-            exit 1
-        fi
-        
-        # 设置默认CA
-        ~/.acme.sh/acme.sh --set-default-ca --server letsencrypt
-        
-        # 申请证书
-        echo -e "${YELLOW}申请证书中...${NC}"
-        ~/.acme.sh/acme.sh --issue -d $DOMAIN --standalone -k ec-256 --force --server letsencrypt
-        
-        # 安装证书
-        mkdir -p /etc/hy2agent/cert
-        ~/.acme.sh/acme.sh --install-cert -d $DOMAIN --ecc \
-            --key-file /etc/hy2agent/cert/private.key \
-            --fullchain-file /etc/hy2agent/cert/cert.pem
-        
-        # 配置自动续签服务
-        cat > /etc/systemd/system/acme-renew.service << EOF
+# 安装 acme.sh
+echo -e "${YELLOW}安装 acme.sh...${NC}"
+curl https://get.acme.sh | sh
+
+# 设置自动更新
+~/.acme.sh/acme.sh --upgrade --auto-upgrade
+
+# 配置域名
+read -p "请输入域名: " DOMAIN
+if [ -z "$DOMAIN" ]; then
+    echo -e "${RED}域名不能为空${NC}"
+    exit 1
+fi
+
+# 配置邮箱
+read -p "请输入邮箱 (用于证书申请): " EMAIL
+if [ -z "$EMAIL" ]; then
+    echo -e "${RED}邮箱不能为空${NC}"
+    exit 1
+fi
+
+# 设置默认CA
+~/.acme.sh/acme.sh --set-default-ca --server letsencrypt
+
+# 申请证书
+echo -e "${YELLOW}开始申请证书...${NC}"
+if ! apply_cert $DOMAIN; then
+    echo -e "${RED}证书申请失败${NC}"
+    echo -e "${YELLOW}请检查：${NC}"
+    echo "1. 域名是否正确解析到本机IP"
+    echo "2. 是否有足够的权限"
+    exit 1
+fi
+
+# 安装证书
+mkdir -p /etc/hy2agent/cert
+~/.acme.sh/acme.sh --install-cert -d $DOMAIN --ecc \
+    --key-file /etc/hy2agent/cert/private.key \
+    --fullchain-file /etc/hy2agent/cert/cert.pem
+    
+# 配置自动续签服务
+cat > /etc/systemd/system/acme-renew.service << EOF
 [Unit]
 Description=Acme certificate renewal service
 After=network.target
@@ -150,8 +150,8 @@ ExecStart=/root/.acme.sh/acme.sh --cron --home /root/.acme.sh
 ExecStartPost=/bin/systemctl restart hy2agent
 EOF
 
-        # 配置自动续签定时器
-        cat > /etc/systemd/system/acme-renew.timer << EOF
+# 配置自动续签定时器
+cat > /etc/systemd/system/acme-renew.timer << EOF
 [Unit]
 Description=Acme certificate renewal timer
 
@@ -164,61 +164,62 @@ Persistent=true
 WantedBy=timers.target
 EOF
 
-        # 启用自动续签服务
-        systemctl daemon-reload
-        systemctl enable acme-renew.timer
-        systemctl start acme-renew.timer
-        
-        # 修改服务启动参数
-        EXTRA_ARGS="-port $PORT -tls -cert /etc/hy2agent/cert/cert.pem -key /etc/hy2agent/cert/private.key"
-        
-        echo -e "${GREEN}已配置证书自动续签，每天凌晨随机时间检查并续签${NC}"
-        ;;
-    2)
-        EXTRA_ARGS="-port $PORT"
-        echo -e "${YELLOW}如需配置 HTTPS，建议使用 Nginx/Caddy 等进行反向代理${NC}"
-        ;;
-    *)
-        echo -e "${RED}无效选项${NC}"
-        exit 1
-        ;;
-esac
+# 启用自动续签服务
+systemctl daemon-reload
+systemctl enable acme-renew.timer
+systemctl start acme-renew.timer
+
+# 配置服务启动参数
+EXTRA_ARGS="-port $PORT -tls -cert /etc/hy2agent/cert/cert.pem -key /etc/hy2agent/cert/private.key"
+
+echo -e "${GREEN}已配置证书自动续签，每天凌晨随机时间检查并续签${NC}"
 
 # 配置访问控制
 echo -e "\n${YELLOW}访问控制配置：${NC}"
-echo "请输入允许访问的IP或域名（多个用空格分隔）"
+
+# 获取本机公网IP
+echo -e "${YELLOW}正在获取本机公网IP...${NC}"
+IPV4=$(curl -s4 4.ipw.cn)
+IPV6=$(curl -s6 6.ipw.cn)
+
+if [ ! -z "$IPV4" ]; then
+    echo -e "${GREEN}检测到IPv4地址: ${YELLOW}$IPV4${NC}"
+fi
+
+if [ ! -z "$IPV6" ]; then
+    echo -e "${GREEN}检测到IPv6地址: ${YELLOW}$IPV6${NC}"
+fi
+
+echo "请输入允许访问的IP地址（多个用空格分隔）"
+echo -e "${YELLOW}提示: 本机公网IP已自动添加到白名单${NC}"
 read -p "IP地址 (例如: 192.168.1.100 10.0.0.1): " WEB_IPS
-read -p "域名 (例如: example.com api.example.com): " WEB_DOMAINS
 
 # 处理输入为数组
 IPS=(${WEB_IPS})
-DOMAINS=(${WEB_DOMAINS})
-
-if [ ${#IPS[@]} -eq 0 ] && [ ${#DOMAINS[@]} -eq 0 ]; then
-    echo -e "${RED}至少需要配置一个IP或域名${NC}"
-    exit 1
-fi
 
 # 构建JSON数组
 IP_LIST="["
+
+# 添加本机IP
+[ ! -z "$IPV4" ] && IP_LIST="$IP_LIST\"$IPV4\","
+[ ! -z "$IPV6" ] && IP_LIST="$IP_LIST\"$IPV6\","
+
+# 添加本地回环地址
+IP_LIST="$IP_LIST\"127.0.0.1\","
+
+# 添加用户输入的IP
 for ip in "${IPS[@]}"; do
     IP_LIST="$IP_LIST\"$ip\","
 done
-IP_LIST="$IP_LIST\"127.0.0.1\"]"
 
-DOMAIN_LIST="["
-for domain in "${DOMAINS[@]}"; do
-    DOMAIN_LIST="$DOMAIN_LIST\"$domain\","
-done
-DOMAIN_LIST="${DOMAIN_LIST%,}]"
+# 移除最后一个逗号并关闭数组
+IP_LIST="${IP_LIST%,}]"
 
 # 创建初始配置文件
 cat > /etc/hy2agent/config.json << EOF
 {
     "api_key": "$(openssl rand -hex 32)",
-    "ip_whitelist": $IP_LIST,
-    "domain_whitelist": $DOMAIN_LIST,
-    "ip_blacklist": []
+    "ip_whitelist": $IP_LIST
 }
 EOF
 
@@ -282,7 +283,7 @@ if systemctl is-active --quiet hy2agent; then
     API_KEY=$(grep -o '"api_key": "[^"]*' /etc/hy2agent/config.json | cut -d'"' -f4)
     echo -e "${GREEN}API Key: ${YELLOW}$API_KEY${NC}"
     echo -e "${GREEN}请妥善保管 API Key${NC}"
-    echo -e "${GREEN}Web IP 白名单: ${YELLOW}$WEB_IP${NC}"
+    echo -e "${GREEN}IP 白名单: ${YELLOW}$WEB_IPS${NC}"
     echo -e "${GREEN}服务端口: ${YELLOW}$PORT${NC}"
     
     # 如果是更新，恢复配置
@@ -299,32 +300,12 @@ fi
 
 # 显示使用说明
 echo -e "\n${GREEN}使用说明：${NC}"
-if [ "$HTTPS_CHOICE" = "1" ]; then
-    echo -e "1. API 文档：https://$DOMAIN/docs"
-    echo -e "\n${YELLOW}证书信息：${NC}"
-    echo -e "- 证书位置：/etc/hy2agent/cert/"
-    echo -e "- 自动续签：每天凌晨随机时间"
-    echo -e "- 查看续签状态：systemctl status acme-renew.timer"
-    echo -e "- 手动续签：~/.acme.sh/acme.sh --cron --home ~/.acme.sh"
-else
-    echo -e "1. API 文档：http://your-server:$PORT/docs"
-    echo -e "\n${YELLOW}Nginx 反向代理配置示例：${NC}"
-    cat << 'EOF'
-server {
-    listen 443 ssl;
-    server_name your-domain.com;
-
-    ssl_certificate /path/to/cert.pem;
-    ssl_certificate_key /path/to/key.pem;
-
-    location / {
-        proxy_pass http://127.0.0.1:8080;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-    }
-}
-EOF
-fi
+echo -e "1. API 文档：https://$DOMAIN/docs"
+echo -e "\n${YELLOW}证书信息：${NC}"
+echo -e "- 证书位置：/etc/hy2agent/cert/"
+echo -e "- 自动续签：每天凌晨随机时间"
+echo -e "- 查看续签状态：systemctl status acme-renew.timer"
+echo -e "- 手动续签：~/.acme.sh/acme.sh --cron --home ~/.acme.sh"
 echo -e "2. 配置文件位置：/etc/hy2agent/config.json"
 echo -e "3. 防火墙端口：$PORT/tcp 需要放通"
 echo -e "3. 服务控制："

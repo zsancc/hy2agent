@@ -37,26 +37,3 @@ func (h *ConfigHandler) UpdateWhitelist(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "Whitelist updated"})
 }
-
-// 获取IP黑名单
-func (h *ConfigHandler) GetBlacklist(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"blacklist": h.cfg.IPBlacklist})
-}
-
-// 更新IP黑名单
-func (h *ConfigHandler) UpdateBlacklist(c *gin.Context) {
-	var req struct {
-		IPs []string `json:"ips" binding:"required"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	h.cfg.IPBlacklist = req.IPs
-	if err := config.SaveConfig(h.cfg); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"message": "Blacklist updated"})
-}

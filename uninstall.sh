@@ -19,24 +19,33 @@ echo -e "${YELLOW}停止 hy2agent 服务...${NC}"
 systemctl stop hy2agent
 systemctl disable hy2agent
 
+# 停止证书续签服务
+if systemctl is-active --quiet acme-renew.timer; then
+    echo -e "${YELLOW}停止证书续签服务...${NC}"
+    systemctl stop acme-renew.timer
+    systemctl disable acme-renew.timer
+fi
+
 # 删除服务文件
 echo -e "${YELLOW}删除服务文件...${NC}"
 rm -f /etc/systemd/system/hy2agent.service
+rm -f /etc/systemd/system/acme-renew.service
+rm -f /etc/systemd/system/acme-renew.timer
 systemctl daemon-reload
 
 # 删除程序文件
 echo -e "${YELLOW}删除程序文件...${NC}"
 rm -f /usr/local/bin/hy2agent
 
-# 询问是否删除配置文件
-read -p "是否删除配置文件？(y/n) " -n 1 -r
+# 询问是否删除配置和证书
+read -p "是否删除配置文件和证书？(y/n) " -n 1 -r
 echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
-    echo -e "${YELLOW}删除配置文件...${NC}"
+    echo -e "${YELLOW}删除配置文件和证书...${NC}"
     rm -rf /etc/hy2agent
-    echo -e "${GREEN}配置文件已删除${NC}"
+    echo -e "${GREEN}配置文件和证书已删除${NC}"
 else
-    echo -e "${YELLOW}保留配置文件在 /etc/hy2agent${NC}"
+    echo -e "${YELLOW}保留配置文件和证书在 /etc/hy2agent${NC}"
 fi
 
 # 检查是否还有残留进程
@@ -51,5 +60,7 @@ echo -e "${GREEN}hy2agent 卸载完成！${NC}"
 echo -e "\n${YELLOW}建议清理：${NC}"
 echo "1. 检查 journalctl 日志："
 echo "   journalctl --vacuum-time=1d"
-echo "2. 如果不再需要，可以删除安装目录："
+echo "2. 如果不再需要，可以删除 acme.sh："
+echo "   ~/.acme.sh/acme.sh --uninstall"
+echo "3. 如果不再需要，可以删除安装目录："
 echo "   rm -rf /etc/hy2agent" 

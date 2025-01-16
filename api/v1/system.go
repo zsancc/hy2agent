@@ -3,7 +3,6 @@ package v1
 import (
 	"hy2agent/internal/service"
 	"net/http"
-	"os/exec"
 
 	"github.com/gin-gonic/gin"
 )
@@ -56,24 +55,4 @@ func (h *SystemHandler) GetInfo(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, sysInfo)
-}
-
-// 重启服务器
-func (h *SystemHandler) Reboot(c *gin.Context) {
-	cmd := exec.Command("shutdown", "-r", "now")
-	if err := cmd.Run(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"message": "System is rebooting"})
-}
-
-// 关闭服务器
-func (h *SystemHandler) Shutdown(c *gin.Context) {
-	cmd := exec.Command("shutdown", "-h", "now")
-	if err := cmd.Run(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"message": "System is shutting down"})
 }

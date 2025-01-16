@@ -15,8 +15,7 @@
   ```
 
 ## IP 访问控制
-- 支持 IP 白名单和黑名单
-- 白名单优先级高于黑名单
+- 仅支持 IP 白名单
 - 配置文件位置：`/etc/hy2agent/config.json`
 
 ## API 端点
@@ -116,25 +115,6 @@ Response 200:
     "cpu_model": "Intel(R) Xeon(R) CPU E5-2680 v3 @ 2.50GHz",
     "timezone": "UTC",
     "boot_time": "2024-01-12T00:00:00Z"
-}
-```
-
-#### 系统控制
-```http
-POST /api/v1/system/reboot
-
-Response 200:
-{
-    "message": "System is rebooting",
-    "scheduled_time": "2024-01-12T12:00:00Z"
-}
-
-POST /api/v1/system/shutdown
-
-Response 200:
-{
-    "message": "System is shutting down",
-    "scheduled_time": "2024-01-12T12:00:00Z"
 }
 ```
 
@@ -328,49 +308,12 @@ Response 200:
 }
 ```
 
-#### IP 黑名单
-```http
-GET /api/v1/config/blacklist
-
-Response 200:
-{
-    "blacklist": [
-        {
-            "ip": "1.2.3.4",
-            "added_at": "2024-01-12T00:00:00Z",
-            "reason": "Suspicious activity"
-        },
-        {
-            "ip": "5.6.7.8",
-            "added_at": "2024-01-12T00:00:00Z",
-            "reason": "Multiple failed attempts"
-        }
-    ]
-}
-
-PUT /api/v1/config/blacklist
-Request:
-{
-    "ips": ["1.2.3.4", "5.6.7.8"],
-    "reasons": {
-        "1.2.3.4": "Suspicious activity",
-        "5.6.7.8": "Multiple failed attempts"
-    }
-}
-
-Response 200:
-{
-    "message": "Blacklist updated",
-    "updated_at": "2024-01-12T12:00:00Z"
-}
-```
-
 ## 错误码说明
 
 - 200: 请求成功
 - 400: 请求参数错误
 - 401: 认证失败（API Key 无效）
-- 403: 访问被拒绝（IP 不在白名单或在黑名单中）
+- 403: 访问被拒绝（IP 不在白名单中）
 - 404: 资源不存在
 - 500: 服务器内部错误
 
