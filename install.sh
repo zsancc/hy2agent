@@ -98,6 +98,72 @@ PORT=${PORT:-8080}
 # 配置 HTTPS
 echo -e "\n${YELLOW}配置 HTTPS...${NC}"
 
+# 定义证书申请函数
+apply_cert() {
+    local DOMAIN=$1
+    local EMAIL=$2
+    local SUCCESS=0
+    
+    # 1. 检查是否有 Nginx
+    if command -v nginx >/dev/null 2>&1; then
+        echo -e "${YELLOW}检测到 Nginx，尝试使用 Nginx 模式...${NC}"
+        if ~/.acme.sh/acme.sh --issue -d $DOMAIN --nginx --server letsencrypt -k ec-256; then
+            SUCCESS=1
+        fi
+    fi
+    
+    # 2. 检查是否有 Apache
+    if [ $SUCCESS -eq 0 ] && command -v apache2 >/dev/null 2>&1 || command -v httpd >/dev/null 2>&1; then
+        echo -e "${YELLOW}检测到 Apache，尝试使用 Apache 模式...${NC}"
+        if ~/.acme.sh/acme.sh --issue -d $DOMAIN --apache --server letsencrypt -k ec-256; then
+            SUCCESS=1
+        fi
+    fi
+    
+    # 3. 尝试 standalone 模式（80端口）
+    if [ $SUCCESS -eq 0 ]; then
+        echo -e "${YELLOW}尝试使用 standalone 模式 (80端口)...${NC}"
+        if ! lsof -i :80 >/dev/null 2>&1; then
+            if ~/.acme.sh/acme.sh --issue -d $DOMAIN --standalone --server letsencrypt -k ec-256; then
+                SUCCESS=1
+            fi
+        else
+            echo -e "${YELLOW}80端口被占用，尝试其他方式...${NC}"
+        fi
+    fi
+    
+    # 4. 尝试 alpn 模式（443端口）
+    if [ $SUCCESS -eq 0 ]; then
+        echo -e "${YELLOW}尝试使用 alpn 模式 (443端口)...${NC}"
+        if ! lsof -i :443 >/dev/null 2>&1; then
+            if ~/.acme.sh/acme.sh --issue -d $DOMAIN --alpn --server letsencrypt -k ec-256; then
+                SUCCESS=1
+            fi
+        else
+            echo -e "${YELLOW}443端口被占用，尝试其他方式...${NC}"
+        fi
+    fi
+    
+    # 5. 尝试 webroot 模式
+    if [ $SUCCESS -eq 0 ]; then
+        echo -e "${YELLOW}尝试使用 webroot 模式...${NC}"
+        # 创建临时目录
+        local WEBROOT="/var/www/acme-temp"
+        mkdir -p $WEBROOT
+        if ~/.acme.sh/acme.sh --issue -d $DOMAIN -w $WEBROOT --server letsencrypt -k ec-256; then
+            SUCCESS=1
+        fi
+        rm -rf $WEBROOT
+    fi
+    
+    if [ $SUCCESS -eq 0 ]; then
+        echo -e "${RED}所有证书申请方式都失败${NC}"
+        return 1
+    fi
+    
+    return 0
+}
+
 # 安装 acme.sh
 echo -e "${YELLOW}安装 acme.sh...${NC}"
 curl https://get.acme.sh | sh
@@ -124,7 +190,7 @@ fi
 
 # 申请证书
 echo -e "${YELLOW}开始申请证书...${NC}"
-if ! apply_cert $DOMAIN; then
+if ! apply_cert "$DOMAIN" "$EMAIL"; then
     echo -e "${RED}证书申请失败${NC}"
     echo -e "${YELLOW}请检查：${NC}"
     echo "1. 域名是否正确解析到本机IP"
