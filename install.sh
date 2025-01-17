@@ -374,7 +374,6 @@ fi
 
 # 显示使用说明
 echo -e "\n${GREEN}使用说明：${NC}"
-echo -e "1. API 文档：https://$DOMAIN/docs"
 echo -e "\n${YELLOW}证书信息：${NC}"
 echo -e "- 证书位置：/etc/hy2agent/cert/"
 echo -e "- 自动续签：每天凌晨随机时间"
