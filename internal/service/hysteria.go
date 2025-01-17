@@ -44,6 +44,13 @@ type HealthCheck struct {
 	CheckTime   string `json:"check_time"`
 }
 
+// 定义常见错误
+var (
+	ErrServiceNotRunning = fmt.Errorf("service is not running")
+	ErrServiceFailed     = fmt.Errorf("service is in failed state")
+	ErrConfigInvalid     = fmt.Errorf("invalid configuration")
+)
+
 func NewHysteria2Service() *Hysteria2Service {
 	return &Hysteria2Service{}
 }
@@ -121,6 +128,11 @@ func (h *Hysteria2Service) getServiceStatus() (string, string, string, string) {
 func (h *Hysteria2Service) GetStatus() (*Hysteria2Status, error) {
 	status := &Hysteria2Status{
 		IsInstalled: h.IsInstalled(),
+	}
+
+	// 添加错误处理
+	if !status.IsInstalled {
+		return status, fmt.Errorf("hysteria2 is not installed")
 	}
 
 	if status.IsInstalled {
@@ -201,6 +213,9 @@ func (h *Hysteria2Service) GetConfig() (string, error) {
 
 // 备份配置
 func (h *Hysteria2Service) BackupConfig() (string, error) {
+	// 限制备份文件数量
+	const maxBackups = 5
+
 	// 读取当前配置
 	data, err := os.ReadFile("/etc/hysteria/config.yaml")
 	if err != nil {
@@ -214,6 +229,14 @@ func (h *Hysteria2Service) BackupConfig() (string, error) {
 	// 写入备份文件
 	if err := os.WriteFile(backupPath, data, 0644); err != nil {
 		return "", err
+	}
+
+	// 清理旧备份
+	backups, _ := h.GetConfigBackups()
+	if len(backups) > maxBackups {
+		for _, backup := range backups[maxBackups:] {
+			os.Remove(filepath.Join("/etc/hysteria", backup))
+		}
 	}
 
 	return backupPath, nil
@@ -277,14 +300,23 @@ func (h *Hysteria2Service) GetLogs(opts *LogOptions) (string, error) {
 
 // 启动服务
 func (h *Hysteria2Service) Start() error {
+	const maxRetries = 3
+	const retryDelay = time.Second
+
 	// 执行启动命令
 	cmd := exec.Command("systemctl", "start", "hysteria-server.service")
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to start service")
 	}
 
-	// 等待一小段时间让服务状态更新
-	time.Sleep(time.Second)
+	// 重试检查服务状态
+	for i := 0; i < maxRetries; i++ {
+		time.Sleep(retryDelay)
+		status, _ := h.GetStatus()
+		if status != nil && status.ServiceStatus == "running" {
+			return nil
+		}
+	}
 
 	// 获取详细状态
 	status, _ := h.GetStatus()
@@ -371,13 +403,57 @@ func (h *Hysteria2Service) CheckHealth() (*HealthCheck, error) {
 		health.ConfigValid = true
 	}
 
-	// TODO: 添加端口检查逻辑
+	// 检查端口是否开放
+	if config, err := h.GetConfig(); err == nil {
+		// 解析配置获取端口
+		port := h.getPortFromConfig(config)
+		if port != "" {
+			health.PortOpen = h.checkPortOpen(port)
+		}
+	}
 
 	return health, nil
 }
 
+// 从配置中获取端口
+func (h *Hysteria2Service) getPortFromConfig(config string) string {
+	// 简单解析 YAML 配置中的 listen 字段
+	for _, line := range strings.Split(config, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "listen:") {
+			// 提取端口号
+			parts := strings.Split(line, ":")
+			if len(parts) >= 3 {
+				return parts[2]
+			}
+		}
+	}
+	return ""
+}
+
+// 检查端口是否开放
+func (h *Hysteria2Service) checkPortOpen(port string) bool {
+	cmd := exec.Command("ss", "-ln", "|", "grep", port)
+	return cmd.Run() == nil
+}
+
 // 获取可用版本列表
 func (h *Hysteria2Service) GetAvailableVersions() ([]string, error) {
+	// 添加缓存机制
+	const cacheFile = "/tmp/hysteria_versions_cache"
+	const cacheDuration = 1 * time.Hour
+
+	// 检查缓存
+	if stat, err := os.Stat(cacheFile); err == nil {
+		if time.Since(stat.ModTime()) < cacheDuration {
+			if data, err := os.ReadFile(cacheFile); err == nil {
+				var versions []string
+				if err := json.Unmarshal(data, &versions); err == nil {
+					return versions, nil
+				}
+			}
+		}
+	}
+
 	// 从GitHub API获取版本列表
 	cmd := exec.Command("curl", "-s", "https://api.github.com/repos/apernet/hysteria/releases")
 	output, err := cmd.Output()
@@ -397,6 +473,11 @@ func (h *Hysteria2Service) GetAvailableVersions() ([]string, error) {
 	versions := make([]string, 0, len(releases))
 	for _, release := range releases {
 		versions = append(versions, release.TagName)
+	}
+
+	// 更新缓存
+	if data, err := json.Marshal(versions); err == nil {
+		os.WriteFile(cacheFile, data, 0644)
 	}
 
 	return versions, nil
